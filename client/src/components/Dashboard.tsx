@@ -1,188 +1,128 @@
 import { useState } from 'react'
-import {
-  Activity, BarChart2, LineChart, Table2,
-  TrendingUp, TrendingDown, Globe, RefreshCw, AlertCircle,
-} from 'lucide-react'
+import { Activity, BarChart2, LineChart, Table2, TrendingUp, TrendingDown } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CardsView } from '@/components/views/CardsView'
 import { LineChartView } from '@/components/views/LineChartView'
 import { BarChartView } from '@/components/views/BarChartView'
 import { TableView } from '@/components/views/TableView'
-import { useCryptoData } from '@/hooks/useCryptoData'
-import { formatCurrency, formatLargeNumber, formatPercent } from '@/lib/utils'
+import { LivePriceFeed } from '@/components/LivePriceFeed'
+import { COIN_META, getShortSymbol } from '@/lib/coinMeta'
+import { formatPercent } from '@/lib/utils'
+import type { LiveData } from '@/hooks/useLiveData'
 import type { ViewMode } from '@/types/crypto'
 
-interface StatCardProps {
-  label: string
-  value: string
-  change?: number
-  sub?: string
-  icon: React.ReactNode
-  loading: boolean
+interface DashboardProps {
+  liveData: LiveData
 }
 
-function StatCard({ label, value, change, sub, icon, loading }: StatCardProps) {
+function formatPrice(s: string) {
+  const n = parseFloat(s)
+  if (isNaN(n)) return '—'
+  if (n >= 1000) return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return `$${n.toFixed(2)}`
+}
+
+function StatCard({
+  symbol,
+  prices,
+  loading,
+}: {
+  symbol: string
+  prices: LiveData['prices']
+  loading: boolean
+}) {
+  const data = prices[symbol]
+  const meta = COIN_META[symbol]
+  const change = data ? parseFloat(data.change24h) : 0
+  const isPos = change >= 0
+
   return (
     <Card>
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-3">
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            {label}
+            {getShortSymbol(symbol)} / USDT
           </span>
-          <div className="rounded-lg bg-slate-100 dark:bg-slate-800 p-1.5 text-slate-500 dark:text-slate-400">
-            {icon}
-          </div>
+          <img src={meta.icon} alt={meta.name} className="h-6 w-6 rounded-full" />
         </div>
-        {loading ? (
+        {loading || !data ? (
           <Skeleton className="h-7 w-32 mb-1" />
         ) : (
           <div className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight leading-tight">
-            {value}
+            {formatPrice(data.lastPrice)}
           </div>
         )}
-        <div className="mt-1 flex items-center gap-1.5">
-          {change !== undefined && !loading && (
-            <span
-              className={`text-xs font-semibold ${change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}
-            >
-              {change >= 0 ? <TrendingUp className="inline h-3 w-3" /> : <TrendingDown className="inline h-3 w-3" />}
-              {' '}{formatPercent(change)}
-            </span>
-          )}
-          {sub && (
-            <span className="text-xs text-slate-400 dark:text-slate-500">{sub}</span>
-          )}
-        </div>
+        {data && (
+          <div className={`mt-1 flex items-center gap-1 text-xs font-semibold ${isPos ? 'text-emerald-500' : 'text-red-500'}`}>
+            {isPos ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+            {formatPercent(change)} 24h
+          </div>
+        )}
       </CardContent>
     </Card>
   )
 }
 
-export function Dashboard() {
-  const { coins, globalStats, loading, error, lastUpdated, refresh } = useCryptoData()
+export function Dashboard({ liveData }: DashboardProps) {
+  const { prices, history, connected, clientCount } = liveData
   const [view, setView] = useState<ViewMode>('cards')
-  const [isRefreshing, setIsRefreshing] = useState(false)
-
-  const handleRefresh = async () => {
-    setIsRefreshing(true)
-    await refresh()
-    setTimeout(() => setIsRefreshing(false), 500)
-  }
+  const symbols = Object.keys(COIN_META)
+  const hasData = symbols.some(s => prices[s])
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6 space-y-6">
+
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-              Market Dashboard
-            </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-              {loading
-                ? 'Loading market data...'
-                : `Tracking ${coins.length} cryptocurrencies · ${
-                    lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()}` : ''
-                  }`}
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={isRefreshing || loading}
-            className="hidden sm:flex"
-          >
-            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Market Dashboard</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+            {connected
+              ? `Streaming live from Binance · ${symbols.length} pairs`
+              : 'Connecting to server…'}
+          </p>
         </div>
 
-        {/* Error banner */}
-        {error && (
-          <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-400">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>
-              {error.includes('429')
-                ? 'Rate limited by CoinGecko API. Showing last cached data. Retrying in 60s...'
-                : `Error: ${error}. Showing last cached data.`}
-            </span>
-          </div>
-        )}
+        {/* Live feed bar */}
+        <LivePriceFeed prices={prices} connected={connected} clientCount={clientCount} />
 
-        {/* Global Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            label="Total Market Cap"
-            value={globalStats ? `$${formatLargeNumber(globalStats.total_market_cap.usd)}` : '—'}
-            change={globalStats?.market_cap_change_percentage_24h_usd}
-            icon={<Globe className="h-4 w-4" />}
-            loading={loading}
-          />
-          <StatCard
-            label="24h Volume"
-            value={globalStats ? `$${formatLargeNumber(globalStats.total_volume.usd)}` : '—'}
-            sub="across all markets"
-            icon={<BarChart2 className="h-4 w-4" />}
-            loading={loading}
-          />
-          <StatCard
-            label="BTC Dominance"
-            value={globalStats ? `${globalStats.market_cap_percentage.btc.toFixed(1)}%` : '—'}
-            sub="of total market cap"
-            icon={<Activity className="h-4 w-4" />}
-            loading={loading}
-          />
-          <StatCard
-            label="Top Asset"
-            value={
-              coins.length > 0 ? formatCurrency(coins[0]?.current_price ?? 0) : '—'
-            }
-            change={coins[0]?.price_change_percentage_24h_in_currency}
-            sub={coins[0] ? `${coins[0].name} (BTC)` : ''}
-            icon={<TrendingUp className="h-4 w-4" />}
-            loading={loading}
-          />
+        {/* Per-coin stat cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {symbols.map(s => (
+            <StatCard key={s} symbol={s} prices={prices} loading={!hasData} />
+          ))}
         </div>
 
         {/* View Tabs */}
-        <Tabs value={view} onValueChange={(v) => setView(v as ViewMode)}>
-          <TabsList className="w-full sm:w-auto">
+        <Tabs value={view} onValueChange={v => setView(v as ViewMode)}>
+          <TabsList>
             <TabsTrigger value="cards">
-              <Activity className="h-4 w-4" />
-              <span className="hidden xs:inline">Cards</span>
+              <Activity className="h-4 w-4" />Cards
             </TabsTrigger>
             <TabsTrigger value="line">
-              <LineChart className="h-4 w-4" />
-              <span className="hidden xs:inline">Line</span>
+              <LineChart className="h-4 w-4" />Line
             </TabsTrigger>
             <TabsTrigger value="bar">
-              <BarChart2 className="h-4 w-4" />
-              <span className="hidden xs:inline">Bar</span>
+              <BarChart2 className="h-4 w-4" />Bar
             </TabsTrigger>
             <TabsTrigger value="table">
-              <Table2 className="h-4 w-4" />
-              <span className="hidden xs:inline">Table</span>
+              <Table2 className="h-4 w-4" />Table
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="cards">
-            <CardsView coins={coins} loading={loading} />
+            <CardsView prices={prices} history={history} />
           </TabsContent>
-
           <TabsContent value="line">
-            <LineChartView coins={coins} loading={loading} />
+            <LineChartView history={history} />
           </TabsContent>
-
           <TabsContent value="bar">
-            <BarChartView coins={coins} loading={loading} />
+            <BarChartView prices={prices} />
           </TabsContent>
-
           <TabsContent value="table">
-            <TableView coins={coins} loading={loading} />
+            <TableView prices={prices} history={history} />
           </TabsContent>
         </Tabs>
       </div>
