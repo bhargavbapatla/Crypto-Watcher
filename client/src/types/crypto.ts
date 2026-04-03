@@ -28,5 +28,49 @@ export interface GlobalStats {
 }
 
 export type ViewMode = 'cards' | 'line' | 'bar' | 'table'
-export type SortField = 'rank' | 'price' | 'change24h' | 'marketCap' | 'volume'
+export type SortField = 'symbol' | 'price' | 'change24h' | 'high' | 'low' | 'volume'
 export type SortDir = 'asc' | 'desc'
+
+export interface PricePoint {
+  price: number
+  timestamp: number
+}
+
+export type PriceHistory = Record<string, PricePoint[]>
+
+export interface PriceData {
+  symbol: string;
+  lastPrice: string;
+  change24h: string;
+  high24h: string;
+  low24h: string;
+  volume: string;
+  timestamp: number;
+}
+
+export interface WelcomeMessage {
+  type: "welcome";
+  message: string;
+  connectedClients: number;
+}
+
+export interface ClientCountMessage {
+  type: "client_count";
+  connectedClients: number;
+}
+
+export interface PriceUpdateMessage extends PriceData {
+  type: "price_update";
+}
+
+export type WSMessage = WelcomeMessage | ClientCountMessage | PriceUpdateMessage;
+
+export interface PriceMap {
+  [symbol: string]: PriceData;
+}
+
+export interface UseWebSocketReturn {
+  prices: PriceMap;
+  connected: boolean;
+  clientCount: number;
+}

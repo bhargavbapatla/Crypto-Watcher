@@ -1,28 +1,39 @@
 import { CryptoCard } from '@/components/CryptoCard'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { CryptoData } from '@/types/crypto'
+import { COIN_META } from '@/lib/coinMeta'
+import type { PriceMap, PriceHistory } from '@/types/crypto'
 
 interface CardsViewProps {
-  coins: CryptoData[]
-  loading: boolean
+  prices: PriceMap
+  history: PriceHistory
 }
 
-export function CardsView({ coins, loading }: CardsViewProps) {
-  if (loading) {
+export function CardsView({ prices, history }: CardsViewProps) {
+  const symbols = Object.keys(COIN_META)
+  const hasAny = symbols.some(s => prices[s])
+
+  if (!hasAny) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-        {Array.from({ length: 10 }).map((_, i) => (
-          <Skeleton key={i} className="h-52 rounded-xl" />
-        ))}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {symbols.map(s => <Skeleton key={s} className="h-56 rounded-xl" />)}
       </div>
     )
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-      {coins.map((coin) => (
-        <CryptoCard key={coin.id} coin={coin} />
-      ))}
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {symbols.map(symbol => {
+        const data = prices[symbol]
+        if (!data) return <Skeleton key={symbol} className="h-56 rounded-xl" />
+        return (
+          <CryptoCard
+            key={symbol}
+            symbol={symbol}
+            data={data}
+            history={history[symbol] ?? []}
+          />
+        )
+      })}
     </div>
   )
 }

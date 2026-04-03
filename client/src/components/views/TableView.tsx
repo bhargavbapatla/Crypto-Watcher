@@ -1,206 +1,170 @@
 import { useState } from 'react'
 import { ArrowUpDown, ArrowUp, ArrowDown, TrendingUp, TrendingDown } from 'lucide-react'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
 import { SparklineChart } from '@/components/SparklineChart'
-import { formatCurrency, formatPercent, formatLargeNumber } from '@/lib/utils'
-import type { CryptoData, SortField, SortDir } from '@/types/crypto'
+import { COIN_META, getShortSymbol } from '@/lib/coinMeta'
+import { formatPercent } from '@/lib/utils'
+import type { PriceMap, PriceHistory, SortField, SortDir } from '@/types/crypto'
 
 interface TableViewProps {
-  coins: CryptoData[]
-  loading: boolean
+  prices: PriceMap
+  history: PriceHistory
 }
 
-function SortIcon({ field, sort }: { field: SortField; sort: { field: SortField; dir: SortDir } }) {
-  if (sort.field !== field)
-    return <ArrowUpDown className="h-3.5 w-3.5 text-slate-300 dark:text-slate-600" />
-  return sort.dir === 'asc' ? (
-    <ArrowUp className="h-3.5 w-3.5 text-violet-500" />
-  ) : (
-    <ArrowDown className="h-3.5 w-3.5 text-violet-500" />
-  )
+function formatPrice(s: string) {
+  const n = parseFloat(s)
+  if (isNaN(n)) return '—'
+  if (n >= 1000) return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  if (n >= 1) return `$${n.toFixed(2)}`
+  return `$${n.toFixed(4)}`
 }
 
-function ChangeCell({ value }: { value: number }) {
-  const positive = value >= 0
-  return (
-    <span
-      className={`inline-flex items-center gap-0.5 text-xs font-semibold ${
-        positive ? 'text-emerald-500' : 'text-red-500'
-      }`}
-    >
-      {positive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-      {formatPercent(value)}
-    </span>
-  )
+function formatVolume(s: string) {
+  const n = parseFloat(s)
+  if (isNaN(n)) return '—'
+  return n.toLocaleString('en-US', { maximumFractionDigits: 0 })
 }
 
-export function TableView({ coins, loading }: TableViewProps) {
-  const [sort, setSort] = useState<{ field: SortField; dir: SortDir }>({
-    field: 'rank',
-    dir: 'asc',
-  })
+function formatTs(ts: number) {
+  return new Date(ts).toLocaleTimeString()
+}
 
-  if (loading) {
-    return (
-      <Card className="overflow-hidden">
-        <div className="space-y-2 p-4">
-          {Array.from({ length: 10 }).map((_, i) => (
-            <Skeleton key={i} className="h-12 w-full rounded-lg" />
-          ))}
-        </div>
-      </Card>
-    )
-  }
+type SortIconProps = { field: SortField; active: SortField; dir: SortDir }
+function SortIcon({ field, active, dir }: SortIconProps) {
+  if (active !== field) return <ArrowUpDown className="h-3.5 w-3.5 text-slate-300 dark:text-slate-600" />
+  return dir === 'asc'
+    ? <ArrowUp className="h-3.5 w-3.5 text-violet-500" />
+    : <ArrowDown className="h-3.5 w-3.5 text-violet-500" />
+}
 
-  const handleSort = (field: SortField) => {
-    setSort((prev) =>
-      prev.field === field
-        ? { field, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-        : { field, dir: 'desc' }
-    )
-  }
+export function TableView({ prices, history }: TableViewProps) {
+  const [sort, setSort] = useState<{ field: SortField; dir: SortDir }>({ field: 'symbol', dir: 'asc' })
 
-  const sorted = [...coins].sort((a, b) => {
-    let av: number, bv: number
-    switch (sort.field) {
-      case 'rank': av = a.market_cap_rank; bv = b.market_cap_rank; break
-      case 'price': av = a.current_price; bv = b.current_price; break
-      case 'change24h':
-        av = a.price_change_percentage_24h_in_currency
-        bv = b.price_change_percentage_24h_in_currency
-        break
-      case 'marketCap': av = a.market_cap; bv = b.market_cap; break
-      case 'volume': av = a.total_volume; bv = b.total_volume; break
-      default: return 0
-    }
-    return sort.dir === 'asc' ? av - bv : bv - av
-  })
+  const symbols = Object.keys(COIN_META)
+  const hasData = symbols.some(s => prices[s])
 
-  const SortableHead = ({
-    field,
-    children,
-    className,
-  }: {
-    field: SortField
-    children: React.ReactNode
-    className?: string
-  }) => (
+  const handleSort = (field: SortField) =>
+    setSort(prev => ({
+      field,
+      dir: prev.field === field && prev.dir === 'desc' ? 'asc' : 'desc',
+    }))
+
+  const rows = symbols
+    .filter(s => prices[s])
+    .sort((a, b) => {
+      const da = prices[a]
+      const db = prices[b]
+      let av: number | string, bv: number | string
+      switch (sort.field) {
+        case 'symbol': av = a; bv = b; break
+        case 'price': av = parseFloat(da.lastPrice); bv = parseFloat(db.lastPrice); break
+        case 'change24h': av = parseFloat(da.change24h); bv = parseFloat(db.change24h); break
+        case 'high': av = parseFloat(da.high24h); bv = parseFloat(db.high24h); break
+        case 'low': av = parseFloat(da.low24h); bv = parseFloat(db.low24h); break
+        case 'volume': av = parseFloat(da.volume); bv = parseFloat(db.volume); break
+        default: return 0
+      }
+      if (typeof av === 'string') return sort.dir === 'asc' ? av.localeCompare(bv as string) : (bv as string).localeCompare(av)
+      return sort.dir === 'asc' ? (av as number) - (bv as number) : (bv as number) - (av as number)
+    })
+
+  const Head = ({ field, children, className }: { field: SortField; children: React.ReactNode; className?: string }) => (
     <TableHead className={className}>
       <button
         onClick={() => handleSort(field)}
-        className="inline-flex items-center gap-1 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+        className="inline-flex items-center gap-1 cursor-pointer hover:text-slate-900 dark:hover:text-white transition-colors"
       >
         {children}
-        <SortIcon field={field} sort={sort} />
+        <SortIcon field={field} active={sort.field} dir={sort.dir} />
       </button>
     </TableHead>
   )
+
+  if (!hasData) {
+    return (
+      <div className="flex flex-col items-center justify-center h-56 gap-3 text-slate-400 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <div className="text-4xl animate-pulse">📋</div>
+        <p className="text-sm font-medium">Waiting for first price update…</p>
+      </div>
+    )
+  }
 
   return (
     <Card className="overflow-hidden">
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
-            <SortableHead field="rank" className="w-14">#</SortableHead>
-            <TableHead className="min-w-40">Asset</TableHead>
-            <SortableHead field="price" className="text-right">Price</SortableHead>
-            <SortableHead field="change24h" className="text-right">1h</SortableHead>
-            <SortableHead field="change24h" className="text-right">24h</SortableHead>
-            <TableHead className="text-right">7d</TableHead>
-            <SortableHead field="marketCap" className="text-right hidden md:table-cell">
-              Market Cap
-            </SortableHead>
-            <SortableHead field="volume" className="text-right hidden lg:table-cell">
-              Volume 24h
-            </SortableHead>
-            <TableHead className="text-right hidden xl:table-cell w-28">7d Chart</TableHead>
+            <Head field="symbol">Asset</Head>
+            <Head field="price" className="text-right">Price</Head>
+            <Head field="change24h" className="text-right">24h Change</Head>
+            <Head field="high" className="text-right hidden sm:table-cell">24h High</Head>
+            <Head field="low" className="text-right hidden sm:table-cell">24h Low</Head>
+            <Head field="volume" className="text-right hidden md:table-cell">Volume</Head>
+            <TableHead className="text-right hidden lg:table-cell">Sparkline</TableHead>
+            <TableHead className="text-right hidden xl:table-cell">Updated</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sorted.map((coin) => {
-            const change24h = coin.price_change_percentage_24h_in_currency
-            const change7d = coin.price_change_percentage_7d_in_currency
-            const change1h = coin.price_change_percentage_1h_in_currency
+          {rows.map(symbol => {
+            const d = prices[symbol]
+            const meta = COIN_META[symbol]
+            const change = parseFloat(d.change24h)
+            const isPos = change >= 0
+            const sparkData = (history[symbol] ?? []).map(p => p.price)
 
             return (
-              <TableRow key={coin.id}>
-                {/* Rank */}
-                <TableCell>
-                  <span className="text-sm font-semibold text-slate-400">
-                    {coin.market_cap_rank}
-                  </span>
-                </TableCell>
-
+              <TableRow key={symbol}>
                 {/* Asset */}
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    <img
-                      src={coin.image}
-                      alt={coin.name}
-                      className="h-8 w-8 rounded-full shrink-0"
-                      loading="lazy"
-                    />
+                    <img src={meta.icon} alt={meta.name} className="h-8 w-8 rounded-full shrink-0" />
                     <div>
-                      <div className="font-semibold text-slate-900 dark:text-white text-sm leading-tight">
-                        {coin.name}
-                      </div>
-                      <div className="text-xs text-slate-400 uppercase font-medium">
-                        {coin.symbol}
-                      </div>
+                      <div className="font-semibold text-slate-900 dark:text-white text-sm">{meta.name}</div>
+                      <div className="text-xs text-slate-400 uppercase font-medium">{getShortSymbol(symbol)}/USDT</div>
                     </div>
                   </div>
                 </TableCell>
 
                 {/* Price */}
                 <TableCell className="text-right">
-                  <span className="font-bold text-slate-900 dark:text-white text-sm">
-                    {formatCurrency(coin.current_price)}
-                  </span>
-                </TableCell>
-
-                {/* 1h change */}
-                <TableCell className="text-right">
-                  <ChangeCell value={change1h} />
+                  <span className="font-bold text-slate-900 dark:text-white text-sm">{formatPrice(d.lastPrice)}</span>
                 </TableCell>
 
                 {/* 24h change */}
                 <TableCell className="text-right">
-                  <Badge variant={change24h >= 0 ? 'positive' : 'negative'}>
-                    {formatPercent(change24h)}
+                  <Badge variant={isPos ? 'positive' : 'negative'}>
+                    {isPos ? <TrendingUp className="h-3 w-3 mr-0.5" /> : <TrendingDown className="h-3 w-3 mr-0.5" />}
+                    {formatPercent(change)}
                   </Badge>
                 </TableCell>
 
-                {/* 7d change */}
-                <TableCell className="text-right">
-                  <ChangeCell value={change7d} />
+                {/* High */}
+                <TableCell className="text-right hidden sm:table-cell">
+                  <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">{formatPrice(d.high24h)}</span>
                 </TableCell>
 
-                {/* Market cap */}
-                <TableCell className="text-right hidden md:table-cell">
-                  <span className="text-sm text-slate-700 dark:text-slate-300 font-medium">
-                    ${formatLargeNumber(coin.market_cap)}
-                  </span>
+                {/* Low */}
+                <TableCell className="text-right hidden sm:table-cell">
+                  <span className="text-sm font-medium text-red-500">{formatPrice(d.low24h)}</span>
                 </TableCell>
 
                 {/* Volume */}
-                <TableCell className="text-right hidden lg:table-cell">
-                  <span className="text-sm text-slate-700 dark:text-slate-300 font-medium">
-                    ${formatLargeNumber(coin.total_volume)}
-                  </span>
+                <TableCell className="text-right hidden md:table-cell">
+                  <span className="text-sm text-slate-600 dark:text-slate-300 font-medium">{formatVolume(d.volume)}</span>
                 </TableCell>
 
                 {/* Sparkline */}
-                <TableCell className="hidden xl:table-cell w-28">
-                  <SparklineChart
-                    data={coin.sparkline_in_7d.price}
-                    positive={change7d >= 0}
-                    height={40}
-                  />
+                <TableCell className="hidden lg:table-cell w-28">
+                  {sparkData.length > 1
+                    ? <SparklineChart data={sparkData} positive={isPos} height={40} />
+                    : <span className="text-xs text-slate-300 dark:text-slate-700">—</span>}
+                </TableCell>
+
+                {/* Timestamp */}
+                <TableCell className="text-right hidden xl:table-cell">
+                  <span className="text-xs text-slate-400">{formatTs(d.timestamp)}</span>
                 </TableCell>
               </TableRow>
             )

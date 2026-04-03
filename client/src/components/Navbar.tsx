@@ -1,13 +1,14 @@
-import { TrendingUp, Sun, Moon, LayoutDashboard, Home } from 'lucide-react'
+import { TrendingUp, Sun, Moon, LayoutDashboard, Home, Wifi, WifiOff } from 'lucide-react'
 import { useTheme } from '@/contexts/ThemeContext'
 import { Button } from '@/components/ui/button'
 
 interface NavbarProps {
   view: 'landing' | 'dashboard'
   onNavigate: (view: 'landing' | 'dashboard') => void
+  connected: boolean
 }
 
-export function Navbar({ view, onNavigate }: NavbarProps) {
+export function Navbar({ view, onNavigate, connected }: NavbarProps) {
   const { theme, toggleTheme } = useTheme()
 
   return (
@@ -28,12 +29,22 @@ export function Navbar({ view, onNavigate }: NavbarProps) {
 
         {/* Right actions */}
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleTheme}
-            aria-label="Toggle theme"
+          {/* WS status pill */}
+          <div
+            className={`hidden sm:flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+              connected
+                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400'
+                : 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-400'
+            }`}
           >
+            {connected ? (
+              <><Wifi className="h-3 w-3" /> Live</>
+            ) : (
+              <><WifiOff className="h-3 w-3" /> Offline</>
+            )}
+          </div>
+
+          <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
             {theme === 'dark' ? (
               <Sun className="h-4 w-4 text-amber-400" />
             ) : (
