@@ -7,7 +7,7 @@ import { useLiveData } from '@/hooks/useLiveData'
 import type { LiveData } from '@/hooks/useLiveData'
 import './App.css'
 
-const WS_URL = 'ws://localhost:8000/ws'
+const WS_URL = 'wss://crypto-watcher-new.onrender.com/ws';
 
 type AppView = 'landing' | 'dashboard'
 
